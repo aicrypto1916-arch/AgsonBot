@@ -54,7 +54,7 @@ def extract_offers(data):
     if isinstance(data, list):
         return data
     if isinstance(data, dict):
-        for key in ["offers", "results", "data", "items", "wycieczki"]:
+        for key in ["trips", "deals", "offers", "results", "data", "items"]:
             if key in data and isinstance(data[key], list):
                 return data[key]
         # Pokaż klucze żeby debugować strukturę
