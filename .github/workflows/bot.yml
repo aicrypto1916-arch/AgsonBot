@@ -2,7 +2,7 @@ name: Lastminuter Bot
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/15 6-19 * * *"
   workflow_dispatch:
 
 jobs:
