@@ -163,6 +163,8 @@ def main():
 
     offers = extract_offers(data)
     print(f"📦 Pobrano {len(offers)} ofert")
+        if offers:
+        print(f"Przykładowa oferta: {offers[0]}")
 
     if not offers:
         print("⚠️ Brak ofert — sprawdź strukturę odpowiedzi powyżej")
