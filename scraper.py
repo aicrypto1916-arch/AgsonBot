@@ -7,8 +7,28 @@ from datetime import datetime
 # === KONFIGURACJA ===
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-MAX_PRICE = int(os.environ.get("MAX_PRICE", 1500))
+MAX_PRICE = int(os.environ.get("MAX_PRICE", 1800))
 SEEN_FILE = "seen_offers.json"
+
+# --- FILTRY ---
+# Kierunki do WYKLUCZENIA (małe litery, bez polskich znaków problem nie istnieje bo porównujemy dokładnie jak w API)
+EXCLUDED_COUNTRIES = ["Tunezja", "Bułgaria", "Egipt"]
+
+# Akceptowane lotniska wylotu
+ALLOWED_AIRPORTS = ["Warszawa", "Łódź", "Lublin"]
+
+# Minimalna liczba dni
+MIN_DAYS = 7
+
+# Akceptowane touroperatorzy (pole 'zrodlo')
+ALLOWED_SOURCES = ["itaka.pl"]
+
+# Wyżywienie: odrzucamy oferty z mniej niż 2 posiłkami.
+# Słowa kluczowe oznaczające ZA MAŁO posiłków (odrzucamy jeśli board zawiera jedno z nich
+# i NIE zawiera żadnego z słów oznaczających 2+ posiłki)
+BOARD_REJECT_KEYWORDS = ["własne", "śniadania"]  # uwaga: "śniadania" samo = 1 posiłek
+BOARD_ACCEPT_KEYWORDS = ["dwa posiłki", "all inclusive", "pełne wyżywienie",
+                          "trzy posiłki", "full board", "half board", "hb", "fb", "ai"]
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -57,27 +77,83 @@ def extract_offers(data):
         for key in ["trips", "deals", "offers", "results", "data", "items"]:
             if key in data and isinstance(data[key], list):
                 return data[key]
-        # Pokaż klucze żeby debugować strukturę
         print(f"Klucze w odpowiedzi: {list(data.keys())}")
     return []
 
 
+def get_hotel_name(offer):
+    """Pole 'hotel' jest stringiem zawierającym JSON, np. '{"name": "Sunny Day...", "img": "..."}'"""
+    raw = offer.get("hotel", "")
+    if isinstance(raw, dict):
+        return raw.get("name", "Hotel")
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            return parsed.get("name", raw)
+        except Exception:
+            return raw
+    return "Hotel"
+
+
 def get_price(offer):
-    for field in ["pln", "price", "cena", "pricePerPerson", "cena_od", "min_price", "price_pax"]:
-        if field in offer:
-            val = offer[field]
-            try:
-                return float(str(val).replace(",", ".").replace("zł", "").replace(" ", "").strip())
-            except:
-                pass
-    return None
+    val = offer.get("pln")
+    if val is None:
+        return None
+    try:
+        return float(str(val).replace(",", ".").replace("zł", "").replace(" ", "").strip())
+    except Exception:
+        return None
 
 
 def offer_id(offer):
-    for field in ["id", "offerId", "offer_id", "offerUrl", "url", "link"]:
+    for field in ["id", "link"]:
         if field in offer:
             return str(offer[field])
     return hashlib.md5(json.dumps(offer, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def passes_filters(offer):
+    """Sprawdza wszystkie kryteria filtrowania. Zwraca (True/False, powód_jeśli_odrzucone)."""
+
+    # Kraj — wykluczenie
+    country = offer.get("country", "")
+    if country in EXCLUDED_COUNTRIES:
+        return False, f"wykluczony kraj: {country}"
+
+    # Lotnisko wylotu
+    airport = offer.get("airport", "")
+    if ALLOWED_AIRPORTS and airport not in ALLOWED_AIRPORTS:
+        return False, f"lotnisko nie na liście: {airport}"
+
+    # Minimalna liczba dni
+    days = offer.get("days")
+    try:
+        days_num = int(days)
+    except (TypeError, ValueError):
+        days_num = None
+    if days_num is not None and days_num < MIN_DAYS:
+        return False, f"za mało dni: {days_num}"
+
+    # Touroperator
+    source = offer.get("zrodlo", "")
+    if ALLOWED_SOURCES and source not in ALLOWED_SOURCES:
+        return False, f"touroperator nie na liście: {source}"
+
+    # Wyżywienie — minimum 2 posiłki
+    board = (offer.get("board") or "").lower()
+    has_accept_kw = any(kw in board for kw in BOARD_ACCEPT_KEYWORDS)
+    has_reject_kw = any(kw in board for kw in BOARD_REJECT_KEYWORDS)
+    if has_reject_kw and not has_accept_kw:
+        return False, f"za mało posiłków: {board}"
+    if not board:
+        return False, "brak informacji o wyżywieniu"
+
+    # Cena
+    price = get_price(offer)
+    if price is None or price >= MAX_PRICE:
+        return False, f"cena: {price}"
+
+    return True, None
 
 
 def load_seen():
@@ -85,7 +161,7 @@ def load_seen():
         try:
             with open(SEEN_FILE, "r") as f:
                 return set(json.load(f))
-        except:
+        except Exception:
             pass
     return set()
 
@@ -118,34 +194,40 @@ def send_telegram(message):
 
 
 def format_offer(offer):
-    name = (offer.get("name") or offer.get("title") or offer.get("hotel")
-            or offer.get("nazwa") or offer.get("hotel_name") or "Oferta")
-    dest = (offer.get("destination") or offer.get("country") or offer.get("kraj")
-            or offer.get("kierunek") or offer.get("country_name") or "")
+    name = get_hotel_name(offer)
+    country = offer.get("country", "")
+    city = offer.get("city", "")
     price = get_price(offer)
-    url = (offer.get("url") or offer.get("link") or offer.get("offer_url") or "")
-    date = (offer.get("departureDate") or offer.get("dataWylotu") or offer.get("date")
-            or offer.get("departure_date") or "")
-    nights = (offer.get("nights") or offer.get("noce") or offer.get("duration") or "")
-    city = (offer.get("departureCity") or offer.get("departure_city") or offer.get("miasto") or "")
+    link = offer.get("link", "")
+    date = offer.get("date", "")
+    days = offer.get("days", "")
+    airport = offer.get("airport", "")
+    board = offer.get("board", "")
+    stars = offer.get("stars", "")
+    source = offer.get("zrodlo", "")
 
     msg = f"🔥 <b>Nowa oferta poniżej {MAX_PRICE} zł!</b>\n\n"
     msg += f"🏨 <b>{name}</b>"
-    if dest:
-        msg += f" — {dest}"
+    if stars:
+        msg += " " + "⭐" * int(stars) if str(stars).isdigit() else ""
+    if country or city:
+        msg += f" — {city or ''}{', ' if city and country else ''}{country or ''}"
     msg += "\n"
     if price:
         msg += f"💰 Cena: <b>{price:.0f} zł</b> / os.\n"
     if date:
         msg += f"✈️ Wylot: {date}"
-        if city:
-            msg += f" z {city}"
+        if airport:
+            msg += f" z {airport}"
         msg += "\n"
-    if nights:
-        msg += f"🌙 Noclegi: {nights}\n"
-    if url:
-        if not url.startswith("http"):
-            url = "https://lastminuter.pl" + url
+    if days:
+        msg += f"🌙 Dni: {days}\n"
+    if board:
+        msg += f"🍽️ Wyżywienie: {board}\n"
+    if source:
+        msg += f"🧳 Touroperator: {source}\n"
+    if link:
+        url = link if link.startswith("http") else "https://lastminuter.pl" + link
         msg += f"\n🔗 {url}"
     msg += f"\n\n⏰ {datetime.now().strftime('%H:%M:%S')}"
     return msg
@@ -153,41 +235,39 @@ def format_offer(offer):
 
 def main():
     print(f"=== Lastminuter Bot — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===")
-    print(f"Filtr: oferty poniżej {MAX_PRICE} zł")
+    print(f"Filtr ceny: poniżej {MAX_PRICE} zł")
+    print(f"Wykluczone kraje: {EXCLUDED_COUNTRIES}")
+    print(f"Lotniska: {ALLOWED_AIRPORTS}")
+    print(f"Min. dni: {MIN_DAYS}")
+    print(f"Touroperatorzy: {ALLOWED_SOURCES}")
 
     data = fetch_offers()
-
-    # Debug: pokaż surową odpowiedź jeśli mało ofert
-    if data and isinstance(data, dict):
-        print(f"Struktura odpowiedzi (klucze): {list(data.keys())}")
-
     offers = extract_offers(data)
     print(f"📦 Pobrano {len(offers)} ofert")
 
-    if offers:
-        print(f"Przykładowa oferta: {offers[0]}")
-
     if not offers:
         print("⚠️ Brak ofert — sprawdź strukturę odpowiedzi powyżej")
-        if data:
-            print(f"Surowa odpowiedź (pierwsze 500 znaków): {str(data)[:500]}")
         return
 
-    # Filtrowanie po cenie
-    cheap = [o for o in offers if (p := get_price(o)) is not None and p < MAX_PRICE]
-    print(f"💸 Oferty poniżej {MAX_PRICE} zł: {len(cheap)}")
+    # Filtrowanie
+    passing = []
+    for o in offers:
+        ok, reason = passes_filters(o)
+        if ok:
+            passing.append(o)
+    print(f"✅ Oferty spełniające kryteria: {len(passing)}")
 
     # Sprawdź które są nowe
     seen = load_seen()
-    new_offers = [o for o in cheap if offer_id(o) not in seen]
+    new_offers = [o for o in passing if offer_id(o) not in seen]
     print(f"🆕 Nowe oferty: {len(new_offers)}")
 
     for offer in new_offers:
         msg = format_offer(offer)
-        print(f"→ Wysyłam: {offer.get('name', offer_id(offer))}")
+        print(f"→ Wysyłam: {get_hotel_name(offer)}")
         send_telegram(msg)
 
-    all_ids = seen | {offer_id(o) for o in cheap}
+    all_ids = seen | {offer_id(o) for o in passing}
     save_seen(all_ids)
     print("✅ Gotowe!")
 
