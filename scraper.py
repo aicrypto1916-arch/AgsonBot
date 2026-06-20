@@ -63,7 +63,7 @@ def extract_offers(data):
 
 
 def get_price(offer):
-    for field in ["price", "cena", "pricePerPerson", "cena_od", "min_price", "price_pax"]:
+    for field in ["pln", "price", "cena", "pricePerPerson", "cena_od", "min_price", "price_pax"]:
         if field in offer:
             val = offer[field]
             try:
