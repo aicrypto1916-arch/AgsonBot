@@ -212,6 +212,7 @@ def format_deal(deal):
         full_link = link if link.startswith("http") else "https://lastminuter.pl" + link
     msg += f"\n🔗 {full_link or cta_link}"
     msg += f"\n\n⏰ Wysłano: {datetime.now().strftime('%H:%M:%S')}"
+    msg += "\n\n🐧 Kocham Cię, Pingwinku ❤️"
     return msg
 
 
