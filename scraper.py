@@ -13,7 +13,7 @@ SEEN_FILE = "seen_offers.json"
 
 # --- FILTRY (działają na podstawie tagów i treści, bo 'deals' nie mają osobnych pól) ---
 EXCLUDED_COUNTRIES = ["tunezja", "bułgaria", "egipt"]  # małe litery, porównanie case-insensitive
-ALLOWED_AIRPORTS = ["warszawa", "łódź", "lublin"]
+ALLOWED_AIRPORTS = []  # wyłączone - tagi lotnisk bywają niekompletne
 MIN_DAYS = 6  # najmniejsza liczba dni z tagu typu "6-8 dni" -> bierzemy dolną granicę
 REQUIRE_ITAKA = False  # na razie wyłączone - zbieramy dane o touroperatorach w logach, dodamy filtr później
 BOARD_ACCEPT_KEYWORDS = ["dwa posiłki", "all inclusive", "pełne wyżywienie",
