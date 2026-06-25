@@ -131,13 +131,7 @@ def passes_filters(deal):
     if REQUIRE_ITAKA and not mentions_itaka(deal):
         return False, "nie wzmiankuje Itaki"
 
-    # Wyżywienie
-    has_accept = any(kw in tag_text for kw in BOARD_ACCEPT_KEYWORDS)
-    has_reject = any(kw in tag_text for kw in BOARD_REJECT_KEYWORDS)
-    if has_reject and not has_accept:
-        return False, f"za mało posiłków (tagi): {tag_names}"
-    if not has_accept and not has_reject:
-        return False, "brak informacji o wyżywieniu w tagach"
+    # Wyżywienie - filtr wyłączony (tagi bywają niekompletne)
 
     # Cena
     price = get_price(deal)
@@ -212,7 +206,6 @@ def format_deal(deal):
         full_link = link if link.startswith("http") else "https://lastminuter.pl" + link
     msg += f"\n🔗 {full_link or cta_link}"
     msg += f"\n\n⏰ Wysłano: {datetime.now().strftime('%H:%M:%S')}"
-    msg += "\n\n🐧 Kocham Cię, Pingwinku ❤️"
     return msg
 
 
