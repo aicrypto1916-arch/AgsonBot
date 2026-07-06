@@ -10,6 +10,7 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 TELEGRAM_CHAT_ID_2 = "8938826689"  # Twoje Chat ID
 MAX_PRICE = int(os.environ.get("MAX_PRICE", 1800))
+TEST_MODE = os.environ.get("TEST_MODE", "false").lower() == "true"
 SEEN_FILE = "seen_offers.json"
 
 # --- FILTRY ---
@@ -231,6 +232,13 @@ def main():
     print(f"Lotniska: {ALLOWED_AIRPORTS or 'wszystkie (wyświetlane w wiadomości)'}")
     print(f"Min. dni: {MIN_DAYS}")
     print(f"Wymagana Itaka: {REQUIRE_ITAKA}")
+
+    if TEST_MODE:
+        msg = "✅ <b>Bot działa poprawnie!</b>\n\nBuongiorno Alessandra! Czy jesteś zadowolona z usług robota?\n\n⏰ " + datetime.now().strftime('%H:%M:%S')
+        print("🧪 Tryb testowy — wysyłam wiadomość testową")
+        send_telegram(msg, TELEGRAM_CHAT_ID)
+        send_telegram(msg, TELEGRAM_CHAT_ID_2)
+        return
 
     data = fetch_data()
     if data is None:
