@@ -8,16 +8,17 @@ from datetime import datetime
 # === KONFIGURACJA ===
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+TELEGRAM_CHAT_ID_2 = "8938826689"  # Twoje Chat ID
 MAX_PRICE = int(os.environ.get("MAX_PRICE", 1800))
 SEEN_FILE = "seen_offers.json"
 
-# --- FILTRY (działają na podstawie tagów i treści, bo 'deals' nie mają osobnych pól) ---
-EXCLUDED_COUNTRIES = ["tunezja", "bułgaria", "egipt"]  # małe litery, porównanie case-insensitive
+# --- FILTRY ---
+EXCLUDED_COUNTRIES = ["tunezja", "bułgaria", "egipt"]
 ALLOWED_AIRPORTS = []  # wyłączone - tagi lotnisk bywają niekompletne
-MIN_DAYS = 6  # najmniejsza liczba dni z tagu typu "6-8 dni" -> bierzemy dolną granicę
-REQUIRE_ITAKA = False  # na razie wyłączone - zbieramy dane o touroperatorach w logach, dodamy filtr później
+MIN_DAYS = 6
+REQUIRE_ITAKA = False
 BOARD_ACCEPT_KEYWORDS = ["dwa posiłki", "all inclusive", "pełne wyżywienie",
-                          "trzy posiłki", "full board", "half board", "wyżywienie"]
+                          "trzy posiłki", "full board", "half board"]
 BOARD_REJECT_KEYWORDS = ["własne", "śniadania"]
 
 HEADERS = {
@@ -59,7 +60,6 @@ def fetch_data():
 
 
 def get_tag_names(deal):
-    """Zwraca listę nazw tagów (małe litery) z pola 'tags'."""
     tags = deal.get("tags", [])
     return [t.get("name", "").lower() for t in tags if isinstance(t, dict)]
 
@@ -70,7 +70,6 @@ def get_tag_slugs(deal):
 
 
 def get_price(deal):
-    """Cena w polu 'cena' (string), to jest cena AKTUALNA w tytule (czyli 'od X zł')."""
     val = deal.get("cena")
     if val is None:
         return None
@@ -81,7 +80,6 @@ def get_price(deal):
 
 
 def get_min_days(deal):
-    """Wyciąga minimalną liczbę dni z tagów typu '6-8 dni', '1-5 dni' itp."""
     for slug in get_tag_slugs(deal):
         m = re.match(r"(\d+)-(\d+)-dni", slug)
         if m:
@@ -92,8 +90,16 @@ def get_min_days(deal):
     return None
 
 
+def get_airports(deal):
+    """Wyciąga lotniska z tagów (typ 'source')."""
+    airports = []
+    for t in deal.get("tags", []):
+        if isinstance(t, dict) and t.get("icon") == "source":
+            airports.append(t.get("name", ""))
+    return airports
+
+
 def mentions_itaka(deal):
-    """Itaka nie jest osobnym polem w 'deals' - sprawdzamy treść, tytuł i link CTA."""
     haystack = " ".join([
         deal.get("title", ""),
         deal.get("content", ""),
@@ -111,12 +117,12 @@ def passes_filters(deal):
     tag_names = get_tag_names(deal)
     tag_text = " ".join(tag_names)
 
-    # Kraj - wykluczenie (sprawdzamy tagi lokalizacji)
+    # Kraj - wykluczenie
     for excluded in EXCLUDED_COUNTRIES:
         if excluded in tag_text:
             return False, f"wykluczony kraj (tag): {excluded}"
 
-    # Lotnisko - przynajmniej jedno z dozwolonych musi być w tagach
+    # Lotnisko - wyłączone, ale zbieramy dane do wyświetlenia
     if ALLOWED_AIRPORTS:
         has_allowed_airport = any(a in tag_names for a in ALLOWED_AIRPORTS)
         if not has_allowed_airport:
@@ -131,7 +137,14 @@ def passes_filters(deal):
     if REQUIRE_ITAKA and not mentions_itaka(deal):
         return False, "nie wzmiankuje Itaki"
 
-    # Wyżywienie - filtr wyłączony (tagi bywają niekompletne)
+    # Wyżywienie - minimum 2 posiłki
+    has_accept = any(kw in tag_text for kw in BOARD_ACCEPT_KEYWORDS)
+    has_reject = any(kw in tag_text for kw in BOARD_REJECT_KEYWORDS)
+    if has_reject and not has_accept:
+        return False, f"za mało posiłków: {tag_text}"
+    if not has_accept and not has_reject:
+        # brak info o wyżywieniu - przepuszczamy żeby nie pomijać dobrych ofert
+        pass
 
     # Cena
     price = get_price(deal)
@@ -161,13 +174,12 @@ def save_seen(seen_ids):
         json.dump(ids, f)
 
 
-def send_telegram(message):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print(f"[TELEGRAM nie skonfigurowany] {message}")
+def send_telegram(message, chat_id):
+    if not TELEGRAM_TOKEN or not chat_id:
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
+        "chat_id": chat_id,
         "text": message,
         "parse_mode": "HTML",
         "disable_web_page_preview": False,
@@ -175,11 +187,11 @@ def send_telegram(message):
     try:
         resp = requests.post(url, json=payload, timeout=10)
         if resp.status_code == 200:
-            print("✅ Telegram: wiadomość wysłana")
+            print(f"✅ Telegram ({chat_id}): wiadomość wysłana")
         else:
-            print(f"❌ Telegram błąd: {resp.text}")
+            print(f"❌ Telegram błąd ({chat_id}): {resp.text}")
     except Exception as e:
-        print(f"❌ Telegram wyjątek: {e}")
+        print(f"❌ Telegram wyjątek ({chat_id}): {e}")
 
 
 def format_deal(deal):
@@ -190,12 +202,15 @@ def format_deal(deal):
     excerpt = deal.get("excerpt", "")
     tag_names = [t.get("name") for t in deal.get("tags", []) if isinstance(t, dict)]
     date_ago = deal.get("date_ago", "")
+    airports = get_airports(deal)
 
     msg = f"🔥 <b>{title}</b>\n\n"
     if excerpt:
         msg += f"{excerpt}\n\n"
     if price:
         msg += f"💰 Cena: <b>{price:.0f} zł</b>\n"
+    if airports:
+        msg += f"✈️ Lotniska: {', '.join(airports)}\n"
     if tag_names:
         msg += f"🏷️ {', '.join(tag_names)}\n"
     if date_ago:
@@ -213,7 +228,7 @@ def main():
     print(f"=== Lastminuter Bot — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===")
     print(f"Filtr ceny: poniżej {MAX_PRICE} zł")
     print(f"Wykluczone kraje: {EXCLUDED_COUNTRIES}")
-    print(f"Lotniska: {ALLOWED_AIRPORTS}")
+    print(f"Lotniska: {ALLOWED_AIRPORTS or 'wszystkie (wyświetlane w wiadomości)'}")
     print(f"Min. dni: {MIN_DAYS}")
     print(f"Wymagana Itaka: {REQUIRE_ITAKA}")
 
@@ -232,12 +247,11 @@ def main():
     passing = []
     for d in deals:
         ok, reason = passes_filters(d)
-        itaka_hint = "🧳Itaka" if mentions_itaka(d) else "🧳?"
         if ok:
             passing.append(d)
-            print(f"✅ {d.get('title', '')[:50]} [{itaka_hint}]")
+            print(f"✅ {d.get('title', '')[:50]}")
         else:
-            print(f"❌ {d.get('title', '')[:50]} [{itaka_hint}] → {reason}")
+            print(f"❌ {d.get('title', '')[:50]} → {reason}")
     print(f"✅ Okazje spełniające kryteria: {len(passing)}")
 
     seen = load_seen()
@@ -247,7 +261,8 @@ def main():
     for deal in new_deals:
         msg = format_deal(deal)
         print(f"→ Wysyłam: {deal.get('title', '')[:50]}")
-        send_telegram(msg)
+        send_telegram(msg, TELEGRAM_CHAT_ID)
+        send_telegram(msg, TELEGRAM_CHAT_ID_2)
 
     all_ids = seen | {offer_id(d) for d in passing}
     save_seen(all_ids)
