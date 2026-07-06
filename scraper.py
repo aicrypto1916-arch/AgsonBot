@@ -10,7 +10,7 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 TELEGRAM_CHAT_ID_2 = "8938826689"  # Twoje Chat ID
 MAX_PRICE = int(os.environ.get("MAX_PRICE", 1800))
-TEST_MODE = os.environ.get("TEST_MODE", "false").lower() == "true"
+TEST_MODE = os.environ.get("TEST_MODE", "false").lower() == "false"
 SEEN_FILE = "seen_offers.json"
 
 # --- FILTRY ---
