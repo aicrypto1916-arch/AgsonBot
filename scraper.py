@@ -9,8 +9,12 @@ from datetime import datetime
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 TELEGRAM_CHAT_ID_2 = "8938826689"  # Twoje Chat ID
+TELEGRAM_CHAT_ID_3 = "7426227247"
+TELEGRAM_CHAT_ID_4 = "8222253475"
+TELEGRAM_CHAT_ID_5 = "5810525517"
+TELEGRAM_CHAT_ID_6 = "1335897532"
 MAX_PRICE = int(os.environ.get("MAX_PRICE", 1800))
-TEST_MODE = os.environ.get("TEST_MODE", "false").lower() == "false"
+TEST_MODE = os.environ.get("TEST_MODE", "false").lower() == "true"
 SEEN_FILE = "seen_offers.json"
 
 # --- FILTRY ---
@@ -238,6 +242,10 @@ def main():
         print("🧪 Tryb testowy — wysyłam wiadomość testową")
         send_telegram(msg, TELEGRAM_CHAT_ID)
         send_telegram(msg, TELEGRAM_CHAT_ID_2)
+        send_telegram(msg, TELEGRAM_CHAT_ID_3)
+        send_telegram(msg, TELEGRAM_CHAT_ID_4)
+        send_telegram(msg, TELEGRAM_CHAT_ID_5)
+        send_telegram(msg, TELEGRAM_CHAT_ID_6)
         return
 
     data = fetch_data()
@@ -271,6 +279,10 @@ def main():
         print(f"→ Wysyłam: {deal.get('title', '')[:50]}")
         send_telegram(msg, TELEGRAM_CHAT_ID)
         send_telegram(msg, TELEGRAM_CHAT_ID_2)
+        send_telegram(msg, TELEGRAM_CHAT_ID_3)
+        send_telegram(msg, TELEGRAM_CHAT_ID_4)
+        send_telegram(msg, TELEGRAM_CHAT_ID_5)
+        send_telegram(msg, TELEGRAM_CHAT_ID_6)
 
     all_ids = seen | {offer_id(d) for d in passing}
     save_seen(all_ids)
