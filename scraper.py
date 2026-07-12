@@ -13,8 +13,9 @@ TELEGRAM_CHAT_ID_3 = "7426227247"
 TELEGRAM_CHAT_ID_4 = "8222253475"
 TELEGRAM_CHAT_ID_5 = "5810525517"
 TELEGRAM_CHAT_ID_6 = "1335897532"
+TELEGRAM_CHAT_ID_7 = "8858025298"
 MAX_PRICE = int(os.environ.get("MAX_PRICE", 1800))
-TEST_MODE = os.environ.get("TEST_MODE", "false").lower() == "true"
+TEST_MODE = False  # wyłączone
 SEEN_FILE = "seen_offers.json"
 
 # --- FILTRY ---
@@ -246,6 +247,7 @@ def main():
         send_telegram(msg, TELEGRAM_CHAT_ID_4)
         send_telegram(msg, TELEGRAM_CHAT_ID_5)
         send_telegram(msg, TELEGRAM_CHAT_ID_6)
+        send_telegram(msg, TELEGRAM_CHAT_ID_7)
         return
 
     data = fetch_data()
@@ -283,6 +285,7 @@ def main():
         send_telegram(msg, TELEGRAM_CHAT_ID_4)
         send_telegram(msg, TELEGRAM_CHAT_ID_5)
         send_telegram(msg, TELEGRAM_CHAT_ID_6)
+        send_telegram(msg, TELEGRAM_CHAT_ID_7)
 
     all_ids = seen | {offer_id(d) for d in passing}
     save_seen(all_ids)
